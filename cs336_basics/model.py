@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import math
 import einops
+# from jaxtyping import Float, Tensor
 
 
 class Linear(nn.Module):
@@ -49,6 +50,9 @@ class Embedding(nn.Module):
 class RMSNorm(nn.Module):
     def __init__(self, d_model: int, eps: float = 1e-5, device=None, dtype=None):
         super().__init__()
+        self.d_model = d_model
+        self.eps = eps
+        self.gain = nn.Parameter(torch.ones(d_model, device=device, dtype=dtype))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -56,4 +60,17 @@ class RMSNorm(nn.Module):
         (batch_size, sequence_length, d_model)
         and return a tensor of the same shape
         """
-        pass
+        in_dtype = x.dtype
+        x = x.to(torch.float32)
+        batch_size, sequence_length, d_model = x.shape
+
+        rms = torch.sqrt(self.eps + einops.einsum(torch.pow(x, 2), "b seq_len d_model -> b seq_len") / self.d_model)
+        gain = einops.repeat(
+            self.gain,
+            "d_model -> batch_size sequence_length d_model",
+            batch_size=batch_size,
+            sequence_length=sequence_length,
+        )
+        rms = einops.repeat(rms, "b seq_len -> b seq_len d_model", d_model=d_model)
+        output = x * gain / rms
+        return output.to(in_dtype)
