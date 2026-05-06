@@ -9,7 +9,7 @@ import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
-from cs336_basics.model import Linear, Embedding, RMSNorm
+from cs336_basics.model import Linear, Embedding, RMSNorm, silu, SwiGlu
 
 
 def run_linear(
@@ -88,7 +88,12 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    # self.dff = math.floor(8 / 3 * d_model / 64) * 64
+    swiglu = SwiGlu(d_model, d_ff, device=w1_weight.device, dtype=w1_weight.dtype)
+    swiglu.linear1.W.data = w1_weight
+    swiglu.linear2.W.data = w2_weight
+    swiglu.linear3.W.data = w3_weight
+    return swiglu(in_features)
 
 
 def run_scaled_dot_product_attention(
@@ -400,7 +405,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    return silu(in_features)
 
 
 def run_get_batch(

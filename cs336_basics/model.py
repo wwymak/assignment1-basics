@@ -74,3 +74,25 @@ class RMSNorm(nn.Module):
         rms = einops.repeat(rms, "b seq_len -> b seq_len d_model", d_model=d_model)
         output = x * gain / rms
         return output.to(in_dtype)
+
+
+def silu(x: torch.Tensor) -> torch.Tensor:
+    return torch.sigmoid(x) * x
+
+
+class SwiGlu(nn.Module):
+    def __init__(self, d_model: int, dff: int, device=None, dtype=None):
+        super().__init__()
+        self.d_model = d_model
+        self.dff = dff
+        # self.W1 = nn.Parameter(torch.empty(self.dff, d_model, device=device, dtype=dtype))
+        # self.W2 = nn.Parameter(torch.empty(d_model, self.dff, device=device, dtype=dtype))
+        # self.W3 = nn.Parameter(torch.empty(self.dff, d_model, device=device, dtype=dtype))
+
+        self.linear1 = Linear(d_model, self.dff, device=device, dtype=dtype)
+        self.linear2 = Linear(self.dff, d_model, device=device, dtype=dtype)
+        self.linear3 = Linear(d_model, self.dff, device=device, dtype=dtype)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        a = silu(self.linear1(x)) * (self.linear3(x))
+        return self.linear2(a)
