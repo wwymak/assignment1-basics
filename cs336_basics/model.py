@@ -96,3 +96,32 @@ class SwiGlu(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         a = silu(self.linear1(x)) * (self.linear3(x))
         return self.linear2(a)
+
+
+class RotaryPositionalEmbedding(nn.Module):
+    def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None):
+        super().__init__()
+        seq_idx = torch.arange(max_seq_len, device=device)
+        self.theta = theta
+        self.d_k = d_k
+        self.max_seq_len = max_seq_len
+
+        theta_range = 1.0 / (theta ** (torch.arange(0, d_k, 2, device=device).float() / d_k))
+        idx_theta = einops.einsum(seq_idx, theta_range, "n,d->n d")
+
+        self.register_buffer("cos_cache", idx_theta.cos())
+        self.register_buffer("sin_cache", idx_theta.sin())
+
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
+
+        cos = self.cos_cache[token_positions]  # (..., seq_len, d_k/2)
+        sin = self.sin_cache[token_positions]  # (..., seq_len, d_k/2)
+
+        x1 = x[..., 0::2]  # (..., seq_len, d_k/2)
+        x2 = x[..., 1::2]  # (..., seq_len, d_k/2)
+
+        rotated_1 = x1 * cos - x2 * sin
+        rotated_2 = x1 * sin + x2 * cos
+
+        out = torch.stack((rotated_1, rotated_2), dim=-1)  # (..., seq_len, d_k/2, 2)
+        return out.flatten(-2)
