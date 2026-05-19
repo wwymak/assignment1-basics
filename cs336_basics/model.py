@@ -130,3 +130,37 @@ class RotaryPositionalEmbedding(nn.Module):
 def softmax(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
     max_value = x.max(dim=dim, keepdim=True)[0]
     return torch.exp(x - max_value) / torch.sum(torch.exp(x - max_value), dim=dim, keepdim=True)
+
+
+def scaled_dot_product_attention(
+    query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, bool_mask: torch.Tensor = None
+) -> torch.Tensor:
+    """
+    keys and queries of shape (batch_size, ..., seq_len, d_k) and values of shape (batch_size, ..., seq_len, d_v), where ... represents any number of other batch-like dimensions (if provided). The implementation should return an output with the shape (batch_size, ..., seq_len, d_v)
+
+    """
+    seq_len_q, d_k = query.shape[-2:]
+    seq_len_k, d_k = key.shape[-2:]
+
+    # if len(query.shape) == 3:
+    #     qk = einops.einsum(
+    #         query, key,
+    #         "batch  seq_len_q d_k, batch seq_len_k d_k -> batch seq_len_q seq_len_k",
+    #         # seq_len_q=seq_len_q,seq_len_k=seq_len_k
+    #     ) / torch.sqrt(d_k)
+    qk = einops.einsum(
+        query,
+        key,
+        "batch ... seq_len_q d_k, batch ... seq_len_k d_k -> batch ... seq_len_q seq_len_k",
+        # seq_len_q=seq_len_q,seq_len_k=seq_len_k
+    ) / math.sqrt(d_k)
+    if bool_mask is not None:
+        if qk.ndim > bool_mask.ndim:
+            missing_dims = qk.ndim - bool_mask.ndim
+            view_shape = (bool_mask.size(0),) + (1,) * missing_dims + bool_mask.shape[1:]
+            bool_mask = bool_mask.view(*view_shape)
+
+        qk = qk.masked_fill(~bool_mask, -torch.inf)
+    qk = softmax(qk, dim=-1)
+    qkv = einops.einsum(qk, value, "batch ... seq_len_q seq_len_k, batch ... seq_len_k d_v -> batch ... seq_len_q d_v")
+    return qkv
